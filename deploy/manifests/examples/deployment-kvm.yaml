@@ -1,0 +1,54 @@
+---
+# Example Deployment using Hyperlight with KVM
+# Demonstrates production-ready security hardening
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hyperlight-app-kvm
+  namespace: default
+  labels:
+    app.kubernetes.io/name: hyperlight-app
+    hyperlight.dev/hypervisor: kvm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hyperlight-app
+      hyperlight.dev/hypervisor: kvm
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hyperlight-app
+        hyperlight.dev/hypervisor: kvm
+    spec:
+      runtimeClassName: hyperlight-kvm
+      # Disable K8s API access - most apps don't need it
+      automountServiceAccountToken: false
+      # Explicitly disable host namespaces
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: your-hyperlight-app:latest  # Replace with your image
+          resources:
+            limits:
+              hyperlight.dev/hypervisor: "1"
+              memory: "256Mi"
+              cpu: "500m"
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            procMount: Default
+            capabilities:
+              drop:
+                - ALL

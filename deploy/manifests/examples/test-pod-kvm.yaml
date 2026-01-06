@@ -1,0 +1,46 @@
+---
+# Test Pod for KVM - verifies device injection works
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hyperlight-test-kvm
+  namespace: default
+  labels:
+    app.kubernetes.io/name: hyperlight-test
+    hyperlight.dev/hypervisor: kvm
+spec:
+  runtimeClassName: hyperlight-kvm
+  containers:
+    - name: test
+      image: alpine:3.19
+      command:
+        - sh
+        - -c
+        - |
+          echo "=== Hyperlight KVM Test Pod ==="
+          echo "Checking for /dev/kvm..."
+          if [ -e /dev/kvm ]; then
+            echo "✓ /dev/kvm exists"
+            ls -la /dev/kvm
+          else
+            echo "✗ /dev/kvm NOT FOUND"
+            exit 1
+          fi
+          echo ""
+          echo "Environment variables:"
+          env | grep HYPERLIGHT || echo "No HYPERLIGHT env vars found"
+          echo ""
+          echo "=== Test Complete ==="
+          sleep infinity
+      resources:
+        limits:
+          hyperlight.dev/hypervisor: "1"
+      securityContext:
+        privileged: false
+        runAsNonRoot: true
+        runAsUser: 65534
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+  restartPolicy: Never

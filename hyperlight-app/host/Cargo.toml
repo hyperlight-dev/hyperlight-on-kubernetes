@@ -1,0 +1,9 @@
+[package]
+name = "hyperlight-hello-host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hyperlight-host = { version = "0.12", features = ["kvm", "mshv3"] }
+anyhow = "1.0"
+clap = { version = "4", features = ["derive"] }

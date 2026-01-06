@@ -1,0 +1,126 @@
+---
+# Hyperlight Hello World - KVM Deployment
+# Image is substituted at deploy time via envsubst
+# Use: just app-local-deploy / just app-azure-deploy / just app-ghcr-deploy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hyperlight-hello-kvm
+  labels:
+    app: hyperlight-hello
+    hypervisor: kvm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hyperlight-hello
+      hypervisor: kvm
+  template:
+    metadata:
+      labels:
+        app: hyperlight-hello
+        hypervisor: kvm
+    spec:
+      # Disable access to Kubernetes API - app doesn't need it
+      automountServiceAccountToken: false
+      # Explicitly disable host namespaces
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      nodeSelector:
+        hyperlight.dev/hypervisor: kvm
+      tolerations:
+        - key: "hyperlight.dev/hypervisor"
+          operator: "Equal"
+          value: "kvm"
+          effect: "NoSchedule"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hyperlight-hello
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          args: ["--loop-mode", "--message", "Hello from KVM!"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            procMount: Default
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              hyperlight.dev/hypervisor: "1"
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              hyperlight.dev/hypervisor: "1"
+              memory: "64Mi"
+              cpu: "100m"
+---
+# Hyperlight Hello World - MSHV Deployment
+# Image is substituted at deploy time via envsubst
+# Use: just app-azure-deploy (MSHV only available on Azure)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hyperlight-hello-mshv
+  labels:
+    app: hyperlight-hello
+    hypervisor: mshv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hyperlight-hello
+      hypervisor: mshv
+  template:
+    metadata:
+      labels:
+        app: hyperlight-hello
+        hypervisor: mshv
+    spec:
+      # Disable access to Kubernetes API - app doesn't need it
+      automountServiceAccountToken: false
+      # Explicitly disable host namespaces
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      nodeSelector:
+        hyperlight.dev/hypervisor: mshv
+      tolerations:
+        - key: "hyperlight.dev/hypervisor"
+          operator: "Equal"
+          value: "mshv"
+          effect: "NoSchedule"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hyperlight-hello
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          args: ["--loop-mode", "--message", "Hello from MSHV!"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            procMount: Default
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              hyperlight.dev/hypervisor: "1"
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              hyperlight.dev/hypervisor: "1"
+              memory: "64Mi"
+              cpu: "100m"

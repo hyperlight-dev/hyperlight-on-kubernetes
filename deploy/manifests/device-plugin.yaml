@@ -1,0 +1,155 @@
+---
+# Namespace for Hyperlight components
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hyperlight-system
+  labels:
+    app.kubernetes.io/name: hyperlight-system
+    app.kubernetes.io/part-of: hyperlight
+
+---
+# RuntimeClass for KVM-based Hyperlight workloads
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: hyperlight-kvm
+  labels:
+    app.kubernetes.io/name: hyperlight-kvm
+    app.kubernetes.io/part-of: hyperlight
+handler: runc
+scheduling:
+  nodeSelector:
+    hyperlight.dev/hypervisor: kvm
+  tolerations:
+    - key: "hyperlight.dev/hypervisor"
+      operator: "Equal"
+      value: "kvm"
+      effect: "NoSchedule"
+
+---
+# RuntimeClass for MSHV-based Hyperlight workloads
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: hyperlight-mshv
+  labels:
+    app.kubernetes.io/name: hyperlight-mshv
+    app.kubernetes.io/part-of: hyperlight
+handler: runc
+scheduling:
+  nodeSelector:
+    hyperlight.dev/hypervisor: mshv
+  tolerations:
+    - key: "hyperlight.dev/hypervisor"
+      operator: "Equal"
+      value: "mshv"
+      effect: "NoSchedule"
+
+---
+# ServiceAccount for device plugin
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hyperlight-device-plugin
+  namespace: hyperlight-system
+  labels:
+    app.kubernetes.io/name: hyperlight-device-plugin
+    app.kubernetes.io/part-of: hyperlight
+
+---
+# DaemonSet for Hyperlight Device Plugin
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hyperlight-device-plugin
+  namespace: hyperlight-system
+  labels:
+    app.kubernetes.io/name: hyperlight-device-plugin
+    app.kubernetes.io/part-of: hyperlight
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hyperlight-device-plugin
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hyperlight-device-plugin
+        app.kubernetes.io/part-of: hyperlight
+    spec:
+      serviceAccountName: hyperlight-device-plugin
+      # Only run on nodes with hyperlight enabled
+      nodeSelector:
+        hyperlight.dev/enabled: "true"
+      # Tolerate hypervisor taints
+      tolerations:
+        - key: "hyperlight.dev/hypervisor"
+          operator: "Exists"
+          effect: "NoSchedule"
+      priorityClassName: system-node-critical
+      containers:
+        - name: device-plugin
+          # Image is substituted at deploy time via envsubst
+          # Set IMAGE env var or use: just plugin-local-deploy / just plugin-azure-deploy
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          env:
+            # Number of concurrent hypervisor allocations per node.
+            # This is NOT physical devices - the hypervisor device is shared.
+            # Each allocation grants access to /dev/kvm or /dev/mshv.
+            # Default: 2000 (conservative for MSHV, KVM can handle more)
+            - name: DEVICE_COUNT
+              value: "${DEVICE_COUNT}"
+            # UID/GID for device node inside containers (should match pod's runAsUser)
+            - name: DEVICE_UID
+              value: "${DEVICE_UID}"
+            - name: DEVICE_GID
+              value: "${DEVICE_GID}"
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsUser: 0  # Required: write access to /var/run/cdi and /var/lib/kubelet/device-plugins
+          volumeMounts:
+            # Kubelet device plugin socket directory
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            # CDI spec directory
+            - name: cdi
+              mountPath: /var/run/cdi
+            # Host /dev to detect hypervisor device
+            - name: dev
+              mountPath: /dev
+              readOnly: true
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          livenessProbe:
+            exec:
+              command:
+                - test
+                - -S
+                - /var/lib/kubelet/device-plugins/hyperlight.sock
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+            type: Directory
+        - name: cdi
+          hostPath:
+            path: /var/run/cdi
+            type: DirectoryOrCreate
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+      terminationGracePeriodSeconds: 30

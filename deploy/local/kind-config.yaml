@@ -1,0 +1,21 @@
+# KIND cluster configuration for Hyperlight development
+# This creates a single-node cluster with access to /dev/kvm
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: hyperlight
+nodes:
+  - role: control-plane
+    # Use newer K8s version for better compatibility
+    image: kindest/node:v1.31.0
+    # Mount /dev/kvm from host into the KIND node
+    extraMounts:
+      - hostPath: /dev/kvm
+        containerPath: /dev/kvm
+    # Label the node for Hyperlight
+    labels:
+      hyperlight.dev/enabled: "true"
+      hyperlight.dev/hypervisor: kvm
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"

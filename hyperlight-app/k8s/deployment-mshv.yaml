@@ -1,0 +1,55 @@
+# Hyperlight Hello World - MSHV Deployment
+# Image is substituted at deploy time via envsubst
+# Use: just app-azure-deploy (MSHV only available on Azure)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hyperlight-hello-mshv
+  labels:
+    app: hyperlight-hello
+    hypervisor: mshv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hyperlight-hello
+      hypervisor: mshv
+  template:
+    metadata:
+      labels:
+        app: hyperlight-hello
+        hypervisor: mshv
+    spec:
+      nodeSelector:
+        hyperlight.dev/hypervisor: mshv
+      tolerations:
+        - key: "hyperlight.dev/hypervisor"
+          operator: "Equal"
+          value: "mshv"
+          effect: "NoSchedule"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hyperlight-hello
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          args: ["--loop-mode", "--message", "Hello from MSHV!"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              hyperlight.dev/hypervisor: "1"
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              hyperlight.dev/hypervisor: "1"
+              memory: "64Mi"
+              cpu: "100m"
