@@ -21,8 +21,9 @@ spec:
         app.kubernetes.io/name: hyperlight-app
         hyperlight.dev/hypervisor: kvm
     spec:
-      runtimeClassName: hyperlight-kvm
-      # Disable K8s API access - most apps don't need it
+      nodeSelector:
+        hyperlight.dev/hypervisor: kvm
+      # Disable K8s API access
       automountServiceAccountToken: false
       # Explicitly disable host namespaces
       hostNetwork: false

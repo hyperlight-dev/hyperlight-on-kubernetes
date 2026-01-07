@@ -17,8 +17,7 @@ RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /app/hyperlight-device-plugin /usr/local/bin/
 
-# Run as non-root
-RUN adduser -D -u 1000 hyperlight
-USER hyperlight
+# Note: Runs as root (runAsUser: 0) in Kubernetes - required for
+# write access to /var/lib/kubelet/device-plugins and /var/run/cdi
 
 ENTRYPOINT ["hyperlight-device-plugin"]

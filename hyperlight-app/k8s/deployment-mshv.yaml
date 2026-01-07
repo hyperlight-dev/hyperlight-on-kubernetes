@@ -22,11 +22,6 @@ spec:
     spec:
       nodeSelector:
         hyperlight.dev/hypervisor: mshv
-      tolerations:
-        - key: "hyperlight.dev/hypervisor"
-          operator: "Equal"
-          value: "mshv"
-          effect: "NoSchedule"
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534

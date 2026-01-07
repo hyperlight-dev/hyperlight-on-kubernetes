@@ -9,7 +9,8 @@ metadata:
     app.kubernetes.io/name: hyperlight-test
     hyperlight.dev/hypervisor: mshv
 spec:
-  runtimeClassName: hyperlight-mshv
+  nodeSelector:
+    hyperlight.dev/hypervisor: mshv
   containers:
     - name: test
       image: alpine:3.19

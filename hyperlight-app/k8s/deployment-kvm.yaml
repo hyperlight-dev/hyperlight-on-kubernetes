@@ -22,11 +22,6 @@ spec:
     spec:
       nodeSelector:
         hyperlight.dev/hypervisor: kvm
-      tolerations:
-        - key: "hyperlight.dev/hypervisor"
-          operator: "Equal"
-          value: "kvm"
-          effect: "NoSchedule"
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
