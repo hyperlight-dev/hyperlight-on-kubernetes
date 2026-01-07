@@ -1,0 +1,183 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  # Consistent image tag for CI
+  IMAGE_TAG: ci-${{ github.sha }}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: device-plugin/go.sum
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: just fmt-check
+
+      - name: Run linters
+        run: just lint-strict
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: device-plugin/go.sum
+
+      - name: Build device plugin
+        run: just plugin-build
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-24.04
+    needs: [lint, build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: device-plugin/go.sum
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          
+          # Verify KVM is available
+          if [ ! -e /dev/kvm ]; then
+            echo "::error::KVM is not available on this runner"
+            exit 1
+          fi
+          ls -la /dev/kvm
+          echo "✓ KVM enabled"
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Install kind
+        run: |
+          go install sigs.k8s.io/kind@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Create KIND cluster
+        run: |
+          just local-up
+          echo "✓ KIND cluster created"
+
+      - name: Build device plugin
+        run: |
+          just plugin-build
+          echo "✓ Device plugin built"
+
+      - name: Push device plugin to local registry
+        run: |
+          just plugin-local-push
+          echo "✓ Device plugin pushed to local registry"
+
+      - name: Deploy device plugin
+        run: |
+          just plugin-local-deploy
+          echo "✓ Device plugin deployed"
+
+      - name: Wait for device plugin to be ready
+        run: |
+          echo "Waiting for device plugin DaemonSet..."
+          kubectl rollout status daemonset/hyperlight-device-plugin -n hyperlight-system --timeout=120s
+          
+          # Wait for node resources to be advertised
+          echo "Waiting for node resources..."
+          for i in {1..30}; do
+            capacity=$(kubectl get nodes -o jsonpath='{.items[0].status.allocatable.hyperlight\.dev/hypervisor}' 2>/dev/null || echo "0")
+            if [ "$capacity" != "0" ] && [ -n "$capacity" ]; then
+              echo "✓ Node advertising $capacity hyperlight.dev/hypervisor devices"
+              break
+            fi
+            echo "Waiting for device plugin to register resources... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run device plugin tests
+        run: |
+          ./scripts/test.sh plugin
+          ./scripts/test.sh nodes
+          ./scripts/test.sh kvm
+          echo "✓ Device plugin tests passed"
+
+      - name: Build Hyperlight app
+        run: |
+          just app-build
+          echo "✓ Hyperlight app built"
+
+      - name: Push Hyperlight app to local registry
+        run: |
+          just app-local-push
+          echo "✓ Hyperlight app pushed to local registry"
+
+      - name: Deploy Hyperlight app
+        run: |
+          just app-local-deploy
+          echo "✓ Hyperlight app deployed"
+
+      - name: Wait for Hyperlight app to be ready
+        run: |
+          echo "Waiting for Hyperlight app deployment..."
+          kubectl rollout status deployment/hyperlight-hello-kvm --timeout=180s
+
+      - name: Validate Hyperlight app output
+        run: |
+          ./scripts/test.sh app
+          echo "✓ Hyperlight app tests passed"
+
+      - name: Show status
+        if: always()
+        run: |
+          echo "=== Pods ==="
+          kubectl get pods -A
+          echo ""
+          echo "=== Device Plugin Logs ==="
+          kubectl logs -n hyperlight-system -l app.kubernetes.io/name=hyperlight-device-plugin --tail=50 || true
+          echo ""
+          echo "=== Hyperlight App Logs ==="
+          kubectl logs -l app=hyperlight-hello --tail=50 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          just local-down || true

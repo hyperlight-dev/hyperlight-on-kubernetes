@@ -162,6 +162,80 @@ test_mshv() {
     fi
 }
 
+test_hyperlight_app() {
+    log_info "Testing Hyperlight app deployment..."
+    
+    # Check if hyperlight-hello deployment exists
+    if ! kubectl get deployment hyperlight-hello-kvm &>/dev/null; then
+        log_error "hyperlight-hello-kvm deployment not found"
+        log_info "Deploy with: just app-build && just app-local-push && just app-local-deploy"
+        return 1
+    fi
+    
+    # Wait for deployment to be ready
+    log_info "Waiting for hyperlight-hello-kvm deployment..."
+    if ! kubectl rollout status deployment/hyperlight-hello-kvm --timeout=180s; then
+        log_error "Deployment failed to become ready"
+        kubectl describe deployment hyperlight-hello-kvm
+        return 1
+    fi
+    
+    # Get pod name
+    local pod_name=$(kubectl get pods -l app=hyperlight-hello,hypervisor=kvm -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    if [ -z "$pod_name" ]; then
+        log_error "No hyperlight-hello-kvm pod found"
+        return 1
+    fi
+    
+    log_info "Checking logs from pod: ${pod_name}"
+    
+    # Wait for the app to produce output (it runs every 30s in loop mode)
+    local timeout=60
+    local elapsed=0
+    local success=false
+    
+    while [ $elapsed -lt $timeout ]; do
+        local logs=$(kubectl logs "$pod_name" --tail=100 2>/dev/null || echo "")
+        
+        # Check for success markers in logs
+        if echo "$logs" | grep -q "Demo Complete"; then
+            log_success "Found 'Demo Complete' in logs"
+            success=true
+            break
+        fi
+        
+        echo -n "."
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+    echo ""
+    
+    if [ "$success" = false ]; then
+        log_error "Timeout waiting for successful demo output"
+        log_info "Pod logs:"
+        kubectl logs "$pod_name" --tail=50
+        return 1
+    fi
+    
+    # Additional validation - check for VM execution proof
+    local logs=$(kubectl logs "$pod_name" --tail=100)
+    
+    if echo "$logs" | grep -q "executing inside a VM"; then
+        log_success "Verified: Guest code executed inside VM"
+    else
+        log_warning "Could not verify VM execution message"
+    fi
+    
+    if echo "$logs" | grep -q "Hypervisor: KVM"; then
+        log_success "Verified: Using KVM hypervisor"
+    else
+        log_warning "Could not verify KVM hypervisor"
+    fi
+    
+    log_success "Hyperlight app test passed!"
+    return 0
+}
+
 cleanup() {
     log_info "Cleaning up test pods..."
     kubectl delete pod hyperlight-test-kvm --ignore-not-found=true 2>/dev/null || true
@@ -207,6 +281,7 @@ usage() {
     echo "  nodes     Check node resources"
     echo "  kvm       Test KVM device injection"
     echo "  mshv      Test MSHV device injection"
+    echo "  app       Test Hyperlight app deployment"
     echo "  cleanup   Remove test pods"
 }
 
@@ -225,6 +300,9 @@ case "${1:-all}" in
         ;;
     mshv)
         test_mshv
+        ;;
+    app)
+        test_hyperlight_app
         ;;
     cleanup)
         cleanup

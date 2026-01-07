@@ -280,6 +280,86 @@ app-undeploy:
     kubectl delete -f {{hyperlight_app_dir}}/k8s/deployment-mshv.yaml --ignore-not-found
 
 # =============================================================================
+# CI / Testing
+# =============================================================================
+
+# Run the full CI test suite locally (simulates PR validation workflow)
+ci-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    echo "========================================"
+    echo "  Hyperlight CI Test Suite"
+    echo "========================================"
+    echo ""
+    echo "This simulates the GitHub Actions PR validation workflow."
+    echo ""
+    
+    # Check KVM
+    if [ ! -e /dev/kvm ]; then
+        echo "❌ /dev/kvm not found - CI tests require KVM"
+        exit 1
+    fi
+    echo "✓ KVM available"
+    echo ""
+    
+    # Step 1: Check formatting
+    echo "=== Step 1/8: Check formatting ==="
+    just fmt-check
+    echo ""
+    
+    # Step 2: Run linters
+    echo "=== Step 2/8: Run linters ==="
+    just lint-strict
+    echo ""
+    
+    # Step 3: Create KIND cluster
+    echo "=== Step 3/8: Create KIND cluster ==="
+    just local-up
+    echo ""
+    
+    # Step 4: Build device plugin
+    echo "=== Step 4/8: Build device plugin ==="
+    just plugin-build
+    echo ""
+    
+    # Step 5: Push and deploy device plugin
+    echo "=== Step 5/8: Deploy device plugin ==="
+    just plugin-local-push
+    just plugin-local-deploy
+    echo ""
+    
+    # Step 6: Wait for device plugin and run tests
+    echo "=== Step 6/8: Test device plugin ==="
+    kubectl rollout status daemonset/hyperlight-device-plugin -n hyperlight-system --timeout=120s
+    sleep 5  # Give kubelet time to update node resources
+    {{project_root}}/scripts/test.sh plugin
+    {{project_root}}/scripts/test.sh nodes
+    {{project_root}}/scripts/test.sh kvm
+    echo ""
+    
+    # Step 7: Build Hyperlight app
+    echo "=== Step 7/8: Build Hyperlight app ==="
+    just app-build
+    echo ""
+    
+    # Step 8: Deploy and test Hyperlight app
+    echo "=== Step 8/8: Deploy and test Hyperlight app ==="
+    just app-local-push
+    just app-local-deploy
+    kubectl rollout status deployment/hyperlight-hello-kvm --timeout=180s
+    {{project_root}}/scripts/test.sh app
+    echo ""
+    
+    echo "========================================"
+    echo "  ✓ All CI tests passed!"
+    echo "========================================"
+
+# Run the full CI test suite and cleanup afterwards
+ci-test-clean: ci-test
+    just local-down
+
+# =============================================================================
 # Development
 # =============================================================================
 
@@ -288,10 +368,40 @@ fmt:
     cd {{device_plugin_dir}} && go fmt ./...
     cd {{hyperlight_app_dir}} && cargo fmt --all
 
+# Check formatting without modifying files (for CI)
+fmt-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Checking Go formatting..."
+    cd {{device_plugin_dir}}
+    if [ -n "$(gofmt -l .)" ]; then
+        echo "❌ Go code is not formatted. Run 'just fmt'"
+        gofmt -d .
+        exit 1
+    fi
+    echo "✓ Go code formatted"
+    
+    echo "Checking Rust formatting..."
+    cd {{hyperlight_app_dir}}
+    cargo fmt --all -- --check
+    echo "✓ Rust code formatted"
+
 # Run linters (Go + Rust host only - guest is no_std)
 lint:
     cd {{device_plugin_dir}} && go vet ./...
     cd {{hyperlight_app_dir}}/host && cargo clippy
+
+# Run linters with warnings as errors (for CI)
+lint-strict:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Running Go vet..."
+    cd {{device_plugin_dir}} && go vet ./...
+    echo "✓ Go vet passed"
+    
+    echo "Running Rust clippy with strict warnings..."
+    cd {{hyperlight_app_dir}}/host && cargo clippy -- -D warnings
+    echo "✓ Rust clippy passed"
 
 # Check prerequisites
 check:

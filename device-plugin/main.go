@@ -38,7 +38,7 @@ const (
 	serverSock         = pluginapi.DevicePluginPath + "hyperlight.sock"
 	kubeletSock        = pluginapi.KubeletSocket
 	cdiSpecPath        = "/var/run/cdi/hyperlight.json"
-	defaultDeviceCount = 2000 // Conservative default for MSHV; KVM can handle more
+	defaultDeviceCount = 2000  // Conservative default for MSHV; KVM can handle more
 	defaultDeviceUID   = 65534 // Default UID for device node in container (nobody)
 	defaultDeviceGID   = 65534 // Default GID for device node in container (nobody)
 )
