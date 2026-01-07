@@ -249,8 +249,3 @@ just check                   # Verify prerequisites
 | cargo-hyperlight | Guest binaries | `cargo install --locked cargo-hyperlight` |
 
 > **Note:** Rust is only needed if you're building Hyperlight applications locally. The example app builds inside Docker, so Rust isn't required on your host machine.
-
-## License
-
-Apache 2.0
-c
