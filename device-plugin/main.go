@@ -190,19 +190,19 @@ func (p *HyperlightDevicePlugin) ListAndWatch(req *pluginapi.Empty, srv pluginap
 		case <-p.stopCh:
 			return nil
 		case <-ticker.C:
-			newHealth := pluginapi.Healthy
+			health := pluginapi.Healthy
 			if _, err := os.Stat(p.devicePath); err != nil {
-				newHealth = pluginapi.Unhealthy
+				health = pluginapi.Unhealthy
 				klog.Warningf("Device %s not found, marking all devices unhealthy", p.devicePath)
 			}
 
 			// Check if health changed (compare against first device as representative)
-			if p.devices[0].Health != newHealth {
+			if p.devices[0].Health != health {
 				// Update ALL devices - they all share the same underlying hypervisor device
 				for i := range p.devices {
-					p.devices[i].Health = newHealth
+					p.devices[i].Health = health
 				}
-				klog.Infof("Device health changed to %s for all %d devices", newHealth, len(p.devices))
+				klog.Infof("Device health changed to %s for all %d devices", health, len(p.devices))
 				if err := srv.Send(&pluginapi.ListAndWatchResponse{Devices: p.devices}); err != nil {
 					return err
 				}
@@ -317,7 +317,6 @@ func (p *HyperlightDevicePlugin) Stop() {
 }
 
 // newFSWatcher creates a filesystem watcher for kubelet restart detection.
-// This is the industry-standard approach used by NVIDIA, Intel, and other device plugins.
 func newFSWatcher(files ...string) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -336,7 +335,7 @@ func newFSWatcher(files ...string) (*fsnotify.Watcher, error) {
 
 // watchKubeletRestart monitors for kubelet restarts using fsnotify.
 // When kubelet restarts, it deletes all sockets in /var/lib/kubelet/device-plugins/.
-// This function blocks until it detects a relevant filesystem event.
+// This function blocks until it detects our plugin socket being deleted.
 func (p *HyperlightDevicePlugin) watchKubeletRestart() {
 	klog.Info("Watching for kubelet restart using fsnotify...")
 
@@ -352,17 +351,22 @@ func (p *HyperlightDevicePlugin) watchKubeletRestart() {
 		select {
 		case <-p.stopCh:
 			return
-		case event := <-watcher.Events:
+		case event, ok := <-watcher.Events:
+			if !ok {
+				klog.Warning("fsnotify events channel closed, falling back to polling")
+				p.watchKubeletRestartPolling()
+				return
+			}
 			if event.Name == serverSock && (event.Op&fsnotify.Remove) == fsnotify.Remove {
 				klog.Info("Plugin socket deleted - kubelet may have restarted")
 				return
 			}
-			// Also watch for kubelet socket recreation (indicates kubelet restart complete)
-			if event.Name == kubeletSock && (event.Op&fsnotify.Create) == fsnotify.Create {
-				klog.Info("Kubelet socket recreated - kubelet restart detected")
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				klog.Warning("fsnotify errors channel closed, falling back to polling")
+				p.watchKubeletRestartPolling()
 				return
 			}
-		case err := <-watcher.Errors:
 			klog.Warningf("fsnotify error: %v", err)
 		}
 	}
