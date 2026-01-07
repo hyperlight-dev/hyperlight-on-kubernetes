@@ -9,44 +9,6 @@ metadata:
     app.kubernetes.io/part-of: hyperlight
 
 ---
-# RuntimeClass for KVM-based Hyperlight workloads
-apiVersion: node.k8s.io/v1
-kind: RuntimeClass
-metadata:
-  name: hyperlight-kvm
-  labels:
-    app.kubernetes.io/name: hyperlight-kvm
-    app.kubernetes.io/part-of: hyperlight
-handler: runc
-scheduling:
-  nodeSelector:
-    hyperlight.dev/hypervisor: kvm
-  tolerations:
-    - key: "hyperlight.dev/hypervisor"
-      operator: "Equal"
-      value: "kvm"
-      effect: "NoSchedule"
-
----
-# RuntimeClass for MSHV-based Hyperlight workloads
-apiVersion: node.k8s.io/v1
-kind: RuntimeClass
-metadata:
-  name: hyperlight-mshv
-  labels:
-    app.kubernetes.io/name: hyperlight-mshv
-    app.kubernetes.io/part-of: hyperlight
-handler: runc
-scheduling:
-  nodeSelector:
-    hyperlight.dev/hypervisor: mshv
-  tolerations:
-    - key: "hyperlight.dev/hypervisor"
-      operator: "Equal"
-      value: "mshv"
-      effect: "NoSchedule"
-
----
 # ServiceAccount for device plugin
 apiVersion: v1
 kind: ServiceAccount
@@ -83,11 +45,6 @@ spec:
       # Only run on nodes with hyperlight enabled
       nodeSelector:
         hyperlight.dev/enabled: "true"
-      # Tolerate hypervisor taints
-      tolerations:
-        - key: "hyperlight.dev/hypervisor"
-          operator: "Exists"
-          effect: "NoSchedule"
       priorityClassName: system-node-critical
       containers:
         - name: device-plugin

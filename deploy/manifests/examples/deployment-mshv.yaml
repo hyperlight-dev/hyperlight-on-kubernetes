@@ -21,8 +21,9 @@ spec:
         app.kubernetes.io/name: hyperlight-app
         hyperlight.dev/hypervisor: mshv
     spec:
-      runtimeClassName: hyperlight-mshv
-      # Disable K8s API access - most apps don't need it
+      nodeSelector:
+        hyperlight.dev/hypervisor: mshv
+      # Disable K8s API access 
       automountServiceAccountToken: false
       # Explicitly disable host namespaces
       hostNetwork: false

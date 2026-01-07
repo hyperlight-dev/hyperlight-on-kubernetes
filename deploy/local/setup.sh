@@ -98,7 +98,7 @@ EOF
 }
 
 setup_node_labels() {
-    log_info "Setting up node labels and taints..."
+    log_info "Setting up node labels..."
     
     # The labels are set in kind-config.yaml, but let's ensure they exist
     local node
@@ -106,9 +106,6 @@ setup_node_labels() {
     
     kubectl label node "${node}" hyperlight.dev/enabled=true --overwrite
     kubectl label node "${node}" hyperlight.dev/hypervisor=kvm --overwrite
-    
-    # Add taint (optional for local dev, but matches production)
-    kubectl taint node "${node}" hyperlight.dev/hypervisor=kvm:NoSchedule --overwrite 2>/dev/null || true
     
     log_success "Node configured"
 }

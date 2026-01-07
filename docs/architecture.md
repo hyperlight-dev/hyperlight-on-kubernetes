@@ -177,36 +177,34 @@ The CDI spec sets device uid/gid to match the container user:
 
 This allows the non-root container process to access the hypervisor device.
 
-## RuntimeClasses
+## Scheduling
 
-Two RuntimeClasses route pods to appropriate node pools:
+Pods target specific hypervisors using `nodeSelector` and get device access via resource requests:
 
-| RuntimeClass | Hypervisor | Node Selector | Toleration |
-|--------------|------------|---------------|------------|
-| `hyperlight-kvm` | KVM | `hyperlight.dev/hypervisor=kvm` | `hyperlight.dev/hypervisor=kvm:NoSchedule` |
-| `hyperlight-mshv` | MSHV | `hyperlight.dev/hypervisor=mshv` | `hyperlight.dev/hypervisor=mshv:NoSchedule` |
-
-Usage:
 ```yaml
 spec:
-  runtimeClassName: hyperlight-kvm
+  nodeSelector:
+    hyperlight.dev/hypervisor: kvm  # or mshv
+  containers:
+    - name: app
+      resources:
+        limits:
+          hyperlight.dev/hypervisor: "1"
 ```
 
-## Node Labels and Taints
+| Component | Purpose |
+|-----------|---------|
+| `nodeSelector` | Ensures pod lands on a node with the specified hypervisor |
+| Resource request | Triggers CDI injection of `/dev/kvm` or `/dev/mshv` |
 
-### Labels
+## Node Labels
+
+The device plugin automatically labels nodes based on detected hypervisor:
 
 | Label | Values | Purpose |
 |-------|--------|---------|
 | `hyperlight.dev/enabled` | `true` | Device plugin runs on this node |
 | `hyperlight.dev/hypervisor` | `kvm` or `mshv` | Which hypervisor is available |
-
-### Taints
-
-| Taint | Effect | Purpose |
-|-------|--------|---------|
-| `hyperlight.dev/hypervisor=kvm:NoSchedule` | NoSchedule | Only Hyperlight workloads on KVM nodes |
-| `hyperlight.dev/hypervisor=mshv:NoSchedule` | NoSchedule | Only Hyperlight workloads on MSHV nodes |
 
 ## Next Steps
 

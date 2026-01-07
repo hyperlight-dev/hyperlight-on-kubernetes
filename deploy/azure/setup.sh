@@ -157,7 +157,6 @@ create_kvm_nodepool() {
             --min-count "${KVM_NODE_MIN_COUNT}" \
             --max-count "${KVM_NODE_MAX_COUNT}" \
             --labels "hyperlight.dev/hypervisor=kvm" "hyperlight.dev/enabled=true" \
-            --node-taints "hyperlight.dev/hypervisor=kvm:NoSchedule" \
             --mode User \
             --ssh-access disabled \
             -o none
@@ -184,7 +183,6 @@ create_mshv_nodepool() {
             --min-count "${MSHV_NODE_MIN_COUNT}" \
             --max-count "${MSHV_NODE_MAX_COUNT}" \
             --labels "hyperlight.dev/hypervisor=mshv" "hyperlight.dev/enabled=true" \
-            --node-taints "hyperlight.dev/hypervisor=mshv:NoSchedule" \
             --mode User \
             --ssh-access disabled \
             -o none

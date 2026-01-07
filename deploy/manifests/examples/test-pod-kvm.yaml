@@ -9,7 +9,8 @@ metadata:
     app.kubernetes.io/name: hyperlight-test
     hyperlight.dev/hypervisor: kvm
 spec:
-  runtimeClassName: hyperlight-kvm
+  nodeSelector:
+    hyperlight.dev/hypervisor: kvm
   containers:
     - name: test
       image: alpine:3.19

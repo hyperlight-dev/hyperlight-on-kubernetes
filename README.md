@@ -80,7 +80,8 @@ kind: Pod
 metadata:
   name: my-hyperlight-app
 spec:
-  runtimeClassName: hyperlight-kvm  # or hyperlight-mshv
+  nodeSelector:
+    hyperlight.dev/hypervisor: kvm  # or mshv
   automountServiceAccountToken: false
   securityContext:
     runAsNonRoot: true
