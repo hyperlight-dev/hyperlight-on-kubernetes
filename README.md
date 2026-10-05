@@ -17,6 +17,25 @@ just status
 just logs
 ```
 
+## Verify Published Device Plugin Images
+
+The publish workflow signs build provenance for each new device-plugin image and stores the attestation in GitHub and GHCR. It also includes BuildKit provenance and an SBOM in the image index. Base images are pinned by digest and updated by Dependabot; these pins do not make the entire build reproducible because package installation still accesses external repositories.
+
+Before deploying, select an image digest and its expected full source commit, then verify both against the publishing workflow:
+
+```bash
+IMAGE_DIGEST='sha256:<published-image-digest>'
+SOURCE_COMMIT='<expected-full-source-commit>'
+gh attestation verify "oci://ghcr.io/hyperlight-dev/hyperlight-device-plugin@${IMAGE_DIGEST}" \
+  --repo hyperlight-dev/hyperlight-on-kubernetes \
+  --signer-workflow hyperlight-dev/hyperlight-on-kubernetes/.github/workflows/publish-device-plugin.yml \
+  --source-ref refs/heads/main \
+  --source-digest "$SOURCE_COMMIT" \
+  --deny-self-hosted-runners
+```
+
+Use the verified digest in the deployment manifest. Existing images published before this workflow change do not acquire attestations retroactively. Verification authenticates the publisher and source; it does not establish device health or configure Kubernetes admission.
+
 ## Verify Device Injection
 
 Deploy a test pod to verify the hypervisor device is properly injected:
