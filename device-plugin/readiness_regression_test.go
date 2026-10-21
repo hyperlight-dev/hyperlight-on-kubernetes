@@ -17,6 +17,7 @@ import (
 )
 
 func TestHostDeviceLossBlocksAllocationAndRecovers(t *testing.T) {
+	t.Setenv("TEST_PROBE_SUCCESS", "1")
 	hostDir := filepath.Join(t.TempDir(), "devices")
 	requireNoError(t, os.Symlink("/dev", hostDir))
 	t.Setenv("HOST_DEVICE_DIR", hostDir)
@@ -54,6 +55,7 @@ func TestHostDeviceLossBlocksAllocationAndRecovers(t *testing.T) {
 }
 
 func TestCancelledHelperDoesNotPoisonNextCheck(t *testing.T) {
+	t.Setenv("TEST_PROBE_SUCCESS", "1")
 	for i := 0; i < 3; i++ {
 		p := testPlugin(t)
 		requireNoError(t, p.checkReadiness(context.Background()))
@@ -77,13 +79,22 @@ func TestCancelledHelperDoesNotPoisonNextCheck(t *testing.T) {
 }
 
 func TestHostDeviceIdentityMustMatch(t *testing.T) {
-	if err := checkDeviceWithHost("mshv", "/dev/null", "/dev/zero"); err == nil {
+	probed := false
+	probe := func(string, int) error { probed = true; return nil }
+	if err := checkDeviceWithHostProbe("mshv", "/dev/null", "/dev/zero", probe); err == nil {
 		t.Fatal("different host device number accepted")
 	}
-	requireNoError(t, checkDeviceWithHost("mshv", "/dev/null", "/dev/null"))
+	if probed {
+		t.Fatal("probed mismatched device")
+	}
+	requireNoError(t, checkDeviceWithHostProbe("mshv", "/dev/null", "/dev/null", probe))
+	if !probed {
+		t.Fatal("matching device was not probed")
+	}
 }
 
 func TestCancellationWhileReapingPreservesHealth(t *testing.T) {
+	t.Setenv("TEST_PROBE_SUCCESS", "1")
 	p := testPlugin(t)
 	requireNoError(t, p.checkReadiness(context.Background()))
 	pending := make(chan error, 1)

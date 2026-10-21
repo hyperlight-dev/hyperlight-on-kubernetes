@@ -75,6 +75,10 @@ func checkDevice(hypervisor, path string) error {
 }
 
 func checkDeviceWithHost(hypervisor, path, hostPath string) error {
+	return checkDeviceWithHostProbe(hypervisor, path, hostPath, probeHypervisor)
+}
+
+func checkDeviceWithHostProbe(hypervisor, path, hostPath string, probe func(string, int) error) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
@@ -107,6 +111,10 @@ func checkDeviceWithHost(hypervisor, path, hostPath string) error {
 	if !ok || stat.Mode&syscall.S_IFMT != syscall.S_IFCHR || stat.Rdev != original.Rdev {
 		return fmt.Errorf("hypervisor device identity changed")
 	}
+	return probe(hypervisor, fd)
+}
+
+func probeHypervisor(hypervisor string, fd int) error {
 	switch hypervisor {
 	case "kvm":
 		// Linux KVM API: GET_API_VERSION and CREATE_VM (no guest memory or vCPUs).
@@ -123,8 +131,7 @@ func checkDeviceWithHost(hypervisor, path, hostPath string) error {
 		}
 		return syscall.Close(int(vm))
 	case "mshv":
-		// MSHV currently has only an open check, not a VM-creation readiness guarantee.
-		return nil
+		return probeMSHV(fd, createMSHVPartition)
 	default:
 		return fmt.Errorf("unsupported hypervisor %q", hypervisor)
 	}
