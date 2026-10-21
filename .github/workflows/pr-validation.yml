@@ -82,7 +82,7 @@ jobs:
         id: kvm-snapshot
         run: |
           test -c /dev/kvm
-          stat -c '%a:%u:%g:%t:%T' /dev/kvm > "$RUNNER_TEMP/kvm-before"
+          stat -c '%a:%u:%g:%t:%T' /dev/kvm > "$RUNNER_TEMP/kvm-before-kind"
           ls -la /dev/kvm
 
       - name: Install just
@@ -100,6 +100,22 @@ jobs:
         run: |
           just local-up
           echo "✓ KIND cluster created"
+
+      - name: Verify KIND KVM metadata transition
+        shell: bash
+        run: |
+          node=$(kind get nodes --name hyperlight)
+          kind_gid=$(docker exec "$node" getent group kvm | cut -d: -f3)
+          [[ "$kind_gid" =~ ^[0-9]+$ ]]
+          test -c /dev/kvm
+          stat -c '%a:%u:%g:%t:%T' /dev/kvm > "$RUNNER_TEMP/kvm-after-kind"
+          # KIND's systemd may assign its own kvm group to the bind-mounted device.
+          IFS=: read -r mode uid _ major minor < "$RUNNER_TEMP/kvm-before-kind"
+          printf '%s:%s:%s:%s:%s\n' "$mode" "$uid" "$kind_gid" "$major" "$minor" > "$RUNNER_TEMP/kvm-expected-kind"
+          if ! cmp -s "$RUNNER_TEMP/kvm-before-kind" "$RUNNER_TEMP/kvm-after-kind"; then
+            diff -u "$RUNNER_TEMP/kvm-expected-kind" "$RUNNER_TEMP/kvm-after-kind"
+          fi
+          cp "$RUNNER_TEMP/kvm-after-kind" "$RUNNER_TEMP/kvm-before-plugin"
 
       - name: Build device plugin
         run: |
@@ -184,8 +200,13 @@ jobs:
         run: |
           just local-down || true
 
-      - name: Verify host KVM metadata is unchanged
+      - name: Verify host KVM metadata after cleanup
         if: always() && steps.kvm-snapshot.outcome == 'success'
         run: |
+          baseline="$RUNNER_TEMP/kvm-before-kind"
+          if [ -f "$RUNNER_TEMP/kvm-before-plugin" ]; then
+            baseline="$RUNNER_TEMP/kvm-before-plugin"
+          fi
+          test -c /dev/kvm
           stat -c '%a:%u:%g:%t:%T' /dev/kvm > "$RUNNER_TEMP/kvm-after"
-          cmp "$RUNNER_TEMP/kvm-before" "$RUNNER_TEMP/kvm-after"
+          diff -u "$baseline" "$RUNNER_TEMP/kvm-after"
