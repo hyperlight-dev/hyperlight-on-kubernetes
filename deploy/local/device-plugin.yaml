@@ -71,6 +71,8 @@ spec:
           # KIND workaround: move termination log out of /dev
           terminationMessagePath: /tmp/termination-log
           env:
+            - name: HOST_DEVICE_DIR
+              value: /host-dev
             # Number of concurrent hypervisor allocations per node.
             # This is NOT physical devices - the hypervisor device is shared.
             # Each allocation grants access to /dev/kvm or /dev/mshv.
@@ -83,38 +85,51 @@ spec:
             - name: DEVICE_GID
               value: "${DEVICE_GID}"
           securityContext:
+            capabilities:
+              drop: [ALL]
             privileged: false
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsUser: 0  # Required: write access to /var/run/cdi and /var/lib/kubelet/device-plugins
           volumeMounts:
+            - name: host-dev
+              mountPath: /host-dev
+              readOnly: true
             # Kubelet device plugin socket directory
             - name: device-plugin
               mountPath: /var/lib/kubelet/device-plugins
             # CDI spec directory
             - name: cdi
               mountPath: /var/run/cdi
-            # Host /dev to detect hypervisor device
-            - name: dev
-              mountPath: /dev
-              readOnly: true
           resources:
             requests:
               memory: "32Mi"
               cpu: "10m"
+              hyperlight.dev/device-access: "1"
             limits:
               memory: "64Mi"
               cpu: "100m"
+              hyperlight.dev/device-access: "1"
           livenessProbe:
             exec:
               command:
-                - test
-                - -S
-                - /var/lib/kubelet/device-plugins/hyperlight.sock
+                - hyperlight-device-plugin
+                - --health-check=liveness
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - hyperlight-device-plugin
+                - --health-check=readiness
+            periodSeconds: 10
+            timeoutSeconds: 5
       volumes:
+        - name: host-dev
+          hostPath:
+            path: /dev
+            type: Directory
         - name: device-plugin
           hostPath:
             path: /var/lib/kubelet/device-plugins
@@ -123,6 +138,76 @@ spec:
           hostPath:
             path: /var/run/cdi
             type: DirectoryOrCreate
+      terminationGracePeriodSeconds: 30
+
+---
+# Inventory only: kubelet grants the main plugin access to this one device.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hyperlight-device-access
+  namespace: hyperlight-system
+  labels:
+    app.kubernetes.io/name: hyperlight-device-access
+    app.kubernetes.io/part-of: hyperlight
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hyperlight-device-access
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hyperlight-device-access
+        app.kubernetes.io/part-of: hyperlight
+    spec:
+      serviceAccountName: hyperlight-device-plugin
+      nodeSelector:
+        hyperlight.dev/enabled: "true"
+      priorityClassName: system-node-critical
+      containers:
+        - name: device-access
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          args: ["--device-access"]
+          terminationMessagePath: /tmp/termination-log
+          securityContext:
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: dev
+              mountPath: /dev
+              readOnly: true
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "100m"
+          livenessProbe:
+            exec:
+              command: ["hyperlight-device-plugin", "--device-access", "--health-check=liveness"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["hyperlight-device-plugin", "--device-access", "--health-check=readiness"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+            type: Directory
         - name: dev
           hostPath:
             path: /dev
