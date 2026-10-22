@@ -41,10 +41,6 @@ jobs:
       - name: Run linters
         run: just lint-strict
 
-      - name: Test device readiness and recovery
-        working-directory: device-plugin
-        run: go test -race -count=1 -timeout=90s ./...
-
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -63,6 +59,66 @@ jobs:
 
       - name: Build device plugin
         run: just plugin-build
+
+  readiness:
+    name: Device Readiness (${{ matrix.hypervisor }}, ${{ matrix.cpu_vendor }})
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - hypervisor: kvm
+            cpu_vendor: hosted
+            live_test: TestKVMLiveVMCreation
+            live_env: TEST_KVM_LIVE
+          - hypervisor: mshv
+            cpu_vendor: amd
+            live_test: TestMSHVLivePartitionCreation
+            live_env: TEST_MSHV_LIVE
+          - hypervisor: mshv
+            cpu_vendor: intel
+            live_test: TestMSHVLivePartitionCreation
+            live_env: TEST_MSHV_LIVE
+    runs-on: ${{ matrix.hypervisor == 'kvm' && 'ubuntu-24.04' || fromJSON(format('["self-hosted", "Linux", "X64", "1ES.Pool=hld-azlinux3-mshv-{0}", "JobId=device-readiness-{0}-{1}-{2}-{3}"]', matrix.cpu_vendor, github.run_id, github.run_number, github.run_attempt)) }}
+    env:
+      HYPERVISOR: ${{ matrix.hypervisor }}
+      LIVE_TEST: ${{ matrix.live_test }}
+      LIVE_ENV: ${{ matrix.live_env }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: device-plugin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: device-plugin/go.mod
+          cache-dependency-path: device-plugin/go.sum
+
+      - name: Check hypervisor host
+        run: |
+          uname -a
+          lscpu
+          git rev-parse HEAD
+          stat -c '%n %F %a %U:%G %t:%T' "/dev/$HYPERVISOR"
+          sudo -n test -c "/dev/$HYPERVISOR"
+
+      - name: Test device readiness and recovery
+        run: go test -race -count=1 -timeout=90s ./...
+
+      - name: Test live hypervisor readiness
+        run: |
+          go test -race -c -o "$RUNNER_TEMP/device-readiness.test" .
+          # Only the live probe needs root; leave host device permissions unchanged.
+          sudo -n env "$LIVE_ENV=1" "$RUNNER_TEMP/device-readiness.test" \
+            -test.v -test.count=1 -test.timeout=60s -test.run "^${LIVE_TEST}$" \
+            | tee "$RUNNER_TEMP/live-readiness.log"
+          grep -F -- "--- PASS: $LIVE_TEST (" "$RUNNER_TEMP/live-readiness.log"
 
   integration:
     name: Integration Tests
@@ -91,7 +147,7 @@ jobs:
       - name: Install kind
         run: |
           go install sigs.k8s.io/kind@latest
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
