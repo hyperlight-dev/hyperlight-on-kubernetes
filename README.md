@@ -153,6 +153,7 @@ kubectl logs -l app=hyperlight-hello -f
 | [Command Reference](docs/commands.md) | All `just` commands explained |
 | [Local Development](docs/local-development.md) | Test with KIND + local registry |
 | [Azure Deployment](docs/azure-deployment.md) | Production on AKS + ACR |
+| [Existing Cluster Deployment](docs/existing-cluster.md) | Deploy to any other Kubernetes cluster |
 | [GHCR Publishing](docs/ghcr-publishing.md) | Publish images to GitHub |
 | [Architecture](docs/architecture.md) | How the device plugin works |
 

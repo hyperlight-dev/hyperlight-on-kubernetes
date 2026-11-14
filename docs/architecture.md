@@ -226,15 +226,18 @@ spec:
 
 ## Node Labels
 
-The device plugin automatically labels nodes based on detected hypervisor:
+The device plugin does not label nodes. Apply these labels to the nodes that should run Hyperlight workloads:
 
 | Label | Values | Purpose |
 |-------|--------|---------|
-| `hyperlight.dev/enabled` | `true` | Device plugin runs on this node |
-| `hyperlight.dev/hypervisor` | `kvm` or `mshv` | Which hypervisor is available |
+| `hyperlight.dev/enabled` | `true` | Selects the nodes that run the device plugin DaemonSets |
+| `hyperlight.dev/hypervisor` | `kvm` or `mshv` | Lets workloads select a hypervisor with `nodeSelector` |
+
+The KIND and AKS setup scripts apply these labels. On other clusters, apply them yourself; see [Existing Cluster Deployment](existing-cluster.md#1-label-the-hyperlight-nodes).
 
 ## Next Steps
 
 - [Local Development](local-development.md) - Test locally with KIND
 - [Azure Deployment](azure-deployment.md) - Deploy to AKS
+- [Existing Cluster Deployment](existing-cluster.md) - Deploy to any other cluster
 - [GHCR Publishing](ghcr-publishing.md) - Publish images publicly
